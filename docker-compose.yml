@@ -1,0 +1,52 @@
+version: "3.9"
+
+# ── SignSpeak — Docker Compose ────────────────────────────────────────────────
+#
+#  Services:
+#   backend   → FastAPI on :8000   (python:3.11-alpine)
+#   frontend  → nginx  on :3000   (nginx:1.27-alpine)
+#
+#  Usage:
+#   docker compose up --build        # first run
+#   docker compose up -d             # background
+#   docker compose down              # stop & remove containers
+#   docker compose logs -f backend   # tail backend logs
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Backend: FastAPI ─────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: signspeak-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Frontend: nginx static ───────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: signspeak-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+networks:
+  default:
+    name: signspeak-net

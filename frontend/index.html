@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SignSpeak — ترجمة لغة الإشارة</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,sans-serif;background:#0d1117;color:#e2e8f0;min-height:100vh;direction:rtl}
+header{background:linear-gradient(135deg,#0f172a,#1e3a5f);border-bottom:1px solid #1e3a8a;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{font-size:34px}
+.logo-title{font-size:20px;font-weight:800;color:#fff}
+.logo-sub{font-size:12px;color:#60a5fa;margin-top:2px}
+nav{display:flex;gap:8px;flex-wrap:wrap}
+nav button{padding:9px 18px;border-radius:9px;border:1px solid #1e293b;cursor:pointer;font-family:Arial;font-size:13px;font-weight:700;color:#94a3b8;background:transparent;transition:all .2s}
+nav button.active{background:#2563eb;border-color:transparent;color:#fff}
+.tab{display:none}
+.tab.active{display:block}
+.camera-layout{max-width:1100px;margin:0 auto;padding:24px 16px;display:grid;grid-template-columns:1fr 320px;gap:20px}
+@media(max-width:760px){.camera-layout{grid-template-columns:1fr}}
+.col-left,.col-right{display:flex;flex-direction:column;gap:16px}
+.card{background:#161b27;border-radius:14px;border:1px solid #1e293b;padding:18px 20px}
+.card-label{font-size:12px;color:#64748b;font-weight:700;margin-bottom:10px;letter-spacing:.5px}
+.video-card{background:#161b27;border-radius:14px;border:1px solid #1e293b;overflow:hidden}
+.video-wrap{position:relative;width:100%;padding-top:75%;background:#000}
+#video,#canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;pointer-events:none}
+#overlay-start{background:rgba(0,0,0,.88)}
+#overlay-load{background:rgba(0,0,0,.92);display:none}
+#overlay-start .ov-icon{font-size:72px}
+#overlay-start p{color:#94a3b8;font-size:16px}
+.spinner{width:48px;height:48px;border:4px solid #1e3a8a;border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite}
+#overlay-load p{color:#60a5fa;font-size:15px}
+#badge{position:absolute;top:12px;right:12px;border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700;display:none;pointer-events:none}
+#badge.found{background:rgba(34,197,94,.18);border:1px solid #22c55e;color:#22c55e}
+#badge.searching{background:rgba(239,68,68,.18);border:1px solid #ef4444;color:#ef4444}
+.controls{padding:14px 16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.btn{padding:11px 22px;border-radius:9px;border:none;cursor:pointer;font-family:Arial;font-size:14px;font-weight:700;color:#fff;transition:opacity .2s,transform .1s}
+.btn:hover:not(:disabled){opacity:.88;transform:translateY(-1px)}
+.btn:disabled{opacity:.4;cursor:default;transform:none}
+.btn-blue{background:#2563eb}
+.btn-red{background:#dc2626}
+.btn-green{background:#059669}
+.btn-purple{background:#7c3aed}
+#sentence-box{min-height:54px;background:#0d1117;border-radius:8px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#sentence-box .empty{color:#334155;font-size:14px}
+.token{background:#1e3a8a;color:#fff;padding:6px 16px;border-radius:8px;font-size:18px;font-weight:800;transition:background .3s}
+.token.flash{background:#22c55e}
+#sign-display{font-size:88px;font-weight:900;line-height:1;min-height:96px;display:flex;align-items:center;justify-content:center;color:#1e293b;border-radius:12px;transition:all .3s}
+#sign-display.has-sign{color:#f1f5f9}
+#sign-display.flash{background:rgba(34,197,94,.08)}
+#conf-section{margin-top:14px;display:none}
+.conf-bar-bg{width:100%;height:8px;background:#1e293b;border-radius:4px;overflow:hidden}
+#conf-bar-fill{height:100%;width:0%;border-radius:4px;transition:width .3s,background .3s}
+#conf-pct{margin-top:6px;font-size:22px;font-weight:800}
+#conf-desc{margin-top:4px;font-size:12px;color:#64748b;line-height:1.6}
+#history-list .empty{color:#334155;font-size:13px;text-align:center;padding:16px 0}
+.hist-row{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#0d1117;border-radius:8px;margin-bottom:6px}
+.hist-sign{font-size:20px;font-weight:800}
+.hist-meta{text-align:left}
+.hist-conf{font-size:11px}
+.hist-time{font-size:10px;color:#475569}
+.inst-item{font-size:12px;color:#94a3b8;padding:5px 0;border-bottom:1px solid #1e293b}
+.inst-item:last-child{border-bottom:none}
+.ref-layout{max-width:900px;margin:0 auto;padding:28px 16px}
+.ref-layout h2{font-size:20px;font-weight:800;margin-bottom:6px}
+.ref-layout>p{color:#64748b;font-size:14px;margin-bottom:24px}
+.ref-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.ref-card{background:#161b27;border-radius:14px;border:1px solid #1e293b;padding:16px;text-align:center;transition:transform .2s;cursor:default}
+.ref-card:hover{transform:translateY(-3px)}
+.ref-emoji{font-size:34px;margin-bottom:8px}
+.ref-sign{font-size:26px;font-weight:900;color:#3b82f6;margin-bottom:6px}
+.ref-desc{font-size:11px;color:#64748b;line-height:1.5}
+.ref-note{margin-top:24px;text-align:center}
+.ref-note p{color:#64748b;font-size:13px}
+.about-layout{max-width:720px;margin:0 auto;padding:28px 16px}
+.about-header{text-align:center;margin-bottom:28px}
+.about-icon{font-size:64px;margin-bottom:12px}
+.about-header h2{font-size:22px;font-weight:800;color:#fff}
+.about-header p{color:#64748b;margin-top:4px}
+.about-section{margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid #1e293b}
+.about-section:last-of-type{border-bottom:none}
+.about-section h3{font-size:15px;font-weight:700;color:#3b82f6;margin-bottom:8px}
+.about-section p{font-size:14px;color:#94a3b8;line-height:1.75}
+.about-footer{background:#0d1117;border-radius:10px;padding:16px;text-align:center;margin-top:20px}
+.about-footer p{font-size:12px;color:#334155;margin-top:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#error-banner{display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#7f1d1d;border:1px solid #ef4444;border-radius:12px;padding:14px 20px;gap:12px;align-items:center;z-index:1000;max-width:90vw;box-shadow:0 4px 24px rgba(0,0,0,.5)}
+#error-banner span{font-size:14px;color:#fecaca}
+#error-banner button{background:none;border:none;color:#f87171;cursor:pointer;font-size:18px;line-height:1;padding:0 4px}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-icon">🤟</span>
+    <div>
+      <div class="logo-title">SignSpeak</div>
+      <div class="logo-sub">ترجمة لغة الإشارة بالذكاء الاصطناعي — في الوقت الفعلي</div>
+    </div>
+  </div>
+  <nav>
+    <button class="active" onclick="switchTab('camera')">📷 الكاميرا</button>
+    <button onclick="switchTab('reference')">📖 المرجع</button>
+    <button onclick="switchTab('about')">ℹ️ عن المشروع</button>
+  </nav>
+</header>
+
+<!-- Tab: Camera -->
+<div id="tab-camera" class="tab active">
+  <div class="camera-layout">
+    <div class="col-left">
+      <div class="video-card">
+        <div class="video-wrap">
+          <video id="video" muted playsinline></video>
+          <canvas id="canvas" width="640" height="480"></canvas>
+          <div class="overlay" id="overlay-start">
+            <span class="ov-icon">🤟</span>
+            <p>اضغط "تشغيل" للبدء</p>
+          </div>
+          <div class="overlay" id="overlay-load">
+            <div class="spinner"></div>
+            <p>جاري تحميل نموذج الكشف...</p>
+          </div>
+          <div id="badge">🔍 يبحث...</div>
+        </div>
+        <div class="controls">
+          <button id="btn-start"  class="btn btn-blue"   onclick="startCamera()">📷 تشغيل الكاميرا</button>
+          <button id="btn-stop"   class="btn btn-red"    onclick="stopCamera()"  style="display:none">⏹ إيقاف</button>
+          <button id="btn-add"    class="btn btn-green"  onclick="addSign()"     disabled>➕ أضف للجملة</button>
+          <button id="btn-clear"  class="btn btn-purple" onclick="clearSentence()" disabled>🗑 مسح الجملة</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">🔤 الجملة المبنية</div>
+        <div id="sentence-box"><span class="empty">ستظهر الإشارات هنا عند الإضافة...</span></div>
+      </div>
+    </div>
+    <div class="col-right">
+      <div class="card" style="text-align:center">
+        <div class="card-label">الإشارة المكتشفة</div>
+        <div id="sign-display">—</div>
+        <div id="conf-section">
+          <div class="conf-bar-bg"><div id="conf-bar-fill"></div></div>
+          <div id="conf-pct"></div>
+          <div id="conf-desc"></div>
+        </div>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-label">📜 السجل الأخير</div>
+        <div id="history-list"><div class="empty">لا يوجد سجل بعد</div></div>
+      </div>
+      <div class="card">
+        <div class="card-label">📋 كيفية الاستخدام</div>
+        <div class="inst-item">1. اضغط تشغيل الكاميرا</div>
+        <div class="inst-item">2. اسمح باستخدام الكاميرا عند الطلب</div>
+        <div class="inst-item">3. ضع يدك أمام الكاميرا بوضوح</div>
+        <div class="inst-item">4. انتظر حتى تظهر الإشارة</div>
+        <div class="inst-item">5. اضغط ➕ لإضافتها للجملة</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab: Reference -->
+<div id="tab-reference" class="tab">
+  <div class="ref-layout">
+    <h2>📖 الإشارات المدعومة</h2>
+    <p>الإصدار الحالي يدعم الإشارات الشائعة والحروف الأساسية.</p>
+    <div class="ref-grid" id="ref-grid"></div>
+    <div class="card ref-note"><p>سيتم إضافة المزيد من الإشارات في الإصدارات القادمة مع تحسين النموذج</p></div>
+  </div>
+</div>
+
+<!-- Tab: About -->
+<div id="tab-about" class="tab">
+  <div class="about-layout">
+    <div class="card">
+      <div class="about-header">
+        <div class="about-icon">🤟</div>
+        <h2>SignSpeak — مشروع PFE</h2>
+        <p>نظام ترجمة لغة الإشارة بالذكاء الاصطناعي</p>
+      </div>
+      <div class="about-section">
+        <h3>🎯 المشكلة</h3>
+        <p>70 مليون شخص أصم وبكم في العالم يعانون من عزلة رقمية كاملة. لا توجد أداة مجانية وسهلة تعمل في المتصفح مباشرة بدون تثبيت.</p>
+      </div>
+      <div class="about-section">
+        <h3>⚙️ طريقة العمل</h3>
+        <p>MediaPipe يكشف 21 نقطة على اليد في الوقت الفعلي. هذه النقاط تُرسل لـ FastAPI الذي يُحلّلها ويُعيد اسم الإشارة ودرجة الثقة فوراً.</p>
+      </div>
+      <div class="about-section">
+        <h3>🧠 التقنيات</h3>
+        <p>HTML + JS للواجهة، MediaPipe Hands للكشف، Python + FastAPI للـ API، NumPy لمعالجة البيانات. كل شيء يعمل في المتصفح بدون GPU.</p>
+      </div>
+      <div class="about-section">
+        <h3>📈 التطوير المستقبلي</h3>
+        <p>تدريب نموذج ML عميق، دعم لغة الإشارة العربية، التعرف على الكلمات الكاملة، تحويل النص إلى كلام.</p>
+      </div>
+      <div class="about-footer">
+        <p>بُني بـ HTML + JS + MediaPipe + FastAPI</p>
+        <p>مشروع PFE — 2025/2026</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const REFERENCE = [
+  { sign: "مرحباً", emoji: "👋", fingers: "كل الأصابع مرفوعة" },
+  { sign: "أحبك",  emoji: "🤟", fingers: "إبهام + سبابة + خنصر" },
+  { sign: "توقف",  emoji: "✋", fingers: "كل الأصابع للأمام" },
+  { sign: "V",     emoji: "✌️", fingers: "سبابة + وسط مرفوعان" },
+  { sign: "L",     emoji: "👆", fingers: "سبابة + إبهام شكل L" },
+  { sign: "Y",     emoji: "🤙", fingers: "إبهام + خنصر مرفوعان" },
+  { sign: "I",     emoji: "🤙", fingers: "خنصر مرفوع وحده" },
+  { sign: "A",     emoji: "✊", fingers: "قبضة مغلقة" },
+  { sign: "B",     emoji: "🖐", fingers: "4 أصابع مرفوعة" },
+  { sign: "D",     emoji: "☝️", fingers: "سبابة فقط للأعلى" },
+  { sign: "W",     emoji: "🤚", fingers: "3 أصابع مرفوعة" },
+  { sign: "U",     emoji: "✌️", fingers: "سبابة+وسط مضمومان" },
+];
+
+// State
+let handsModel = null, cameraObj = null;
+let currentSign = null, currentConf = 0;
+let sentence = [], history = [], lastSendMs = 0;
+
+const API = "http://localhost:8000";
+
+// Elements
+const video        = document.getElementById("video");
+const canvas       = document.getElementById("canvas");
+const ctx          = canvas.getContext("2d");
+const overlayStart = document.getElementById("overlay-start");
+const overlayLoad  = document.getElementById("overlay-load");
+const badge        = document.getElementById("badge");
+const btnStart     = document.getElementById("btn-start");
+const btnStop      = document.getElementById("btn-stop");
+const btnAdd       = document.getElementById("btn-add");
+const btnClear     = document.getElementById("btn-clear");
+const signDisplay  = document.getElementById("sign-display");
+const confSection  = document.getElementById("conf-section");
+const confBarFill  = document.getElementById("conf-bar-fill");
+const confPct      = document.getElementById("conf-pct");
+const confDesc     = document.getElementById("conf-desc");
+const sentenceBox  = document.getElementById("sentence-box");
+const historyList  = document.getElementById("history-list");
+
+// Build reference grid
+(function () {
+  const grid = document.getElementById("ref-grid");
+  REFERENCE.forEach(r => {
+    grid.insertAdjacentHTML("beforeend",
+      `<div class="ref-card">
+        <div class="ref-emoji">${r.emoji}</div>
+        <div class="ref-sign">${r.sign}</div>
+        <div class="ref-desc">${r.fingers}</div>
+      </div>`);
+  });
+})();
+
+// Tab switcher
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+  document.getElementById("tab-" + name).classList.add("active");
+  const idx = { camera: 0, reference: 1, about: 2 }[name];
+  document.querySelectorAll("nav button")[idx].classList.add("active");
+}
+
+// Local classifier fallback
+function localClassify(pts) {
+  const isUp = (tip, pip) => pts[tip].y < pts[pip].y;
+  const key = [
+    pts[4].x > pts[3].x,
+    isUp(8,6), isUp(12,10), isUp(16,14), isUp(20,18)
+  ].join(",");
+  const MAP = {
+    "false,false,false,false,false": ["A",      0.82],
+    "false,true,true,true,true":     ["B",      0.85],
+    "false,true,false,false,false":  ["D",      0.80],
+    "false,true,true,false,false":   ["V",      0.87],
+    "true,true,false,false,false":   ["L",      0.84],
+    "false,false,false,false,true":  ["I",      0.82],
+    "true,false,false,false,true":   ["أحبك",   0.92],
+    "true,true,true,true,true":      ["مرحباً", 0.90],
+    "true,false,false,false,false":  ["Y",      0.78],
+    "false,true,true,true,false":    ["W",      0.80],
+    "true,true,true,true,false":     ["توقف",   0.84],
+  };
+  return MAP[key] || ["?", 0.40];
+}
+
+// Send to API or fallback
+async function classify(landmarks) {
+  try {
+    const res = await fetch(`${API}/predict`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ landmarks: landmarks.map(l => ({ x: l.x, y: l.y, z: l.z })) }),
+    });
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    updateSign(d.sign, d.confidence, d.description);
+  } catch {
+    const [s, c] = localClassify(landmarks);
+    updateSign(s, c, s !== "?" ? "تم الكشف محلياً" : "لا توجد إشارة معروفة");
+  }
+}
+
+// Update sign UI
+function updateSign(sign, conf, desc) {
+  currentSign = sign;
+  currentConf = conf;
+  if (!sign || sign === "?") {
+    signDisplay.textContent = "—";
+    signDisplay.className = "";
+    confSection.style.display = "none";
+    btnAdd.disabled = true;
+    return;
+  }
+  signDisplay.textContent = sign;
+  signDisplay.className = "has-sign";
+  btnAdd.disabled = false;
+  const pct   = Math.round(conf * 100);
+  const color = conf >= 0.85 ? "#22c55e" : conf >= 0.70 ? "#f59e0b" : "#ef4444";
+  confSection.style.display = "block";
+  confBarFill.style.width      = pct + "%";
+  confBarFill.style.background = color;
+  confPct.textContent  = pct + "%";
+  confPct.style.color  = color;
+  confDesc.textContent = desc || "";
+}
+
+// MediaPipe results handler
+function onResults(results) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!results.multiHandLandmarks || !results.multiHandLandmarks.length) {
+    badge.className  = "searching";
+    badge.textContent = "🔍 يبحث...";
+    updateSign(null, 0, "");
+    return;
+  }
+  badge.className  = "found";
+  badge.textContent = "✋ يد مكتشفة";
+  const lms = results.multiHandLandmarks[0];
+
+  // Draw connections
+  const CONN = window.HAND_CONNECTIONS || [];
+  ctx.strokeStyle = "rgba(34,197,94,.7)";
+  ctx.lineWidth   = 2.5;
+  for (const [a, b] of CONN) {
+    ctx.beginPath();
+    ctx.moveTo(lms[a].x * canvas.width, lms[a].y * canvas.height);
+    ctx.lineTo(lms[b].x * canvas.width, lms[b].y * canvas.height);
+    ctx.stroke();
+  }
+  // Draw points
+  for (const lm of lms) {
+    ctx.beginPath();
+    ctx.arc(lm.x * canvas.width, lm.y * canvas.height, 5, 0, Math.PI * 2);
+    ctx.fillStyle   = "#fff";
+    ctx.fill();
+    ctx.strokeStyle = "#3b82f6";
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+  }
+  // Throttle 200ms
+  const now = Date.now();
+  if (now - lastSendMs > 200) { lastSendMs = now; classify(lms); }
+}
+
+// Start camera
+async function startCamera() {
+  overlayLoad.style.display = "flex";
+  btnStart.disabled = true;
+  try {
+    if (!window.Hands) throw new Error("MediaPipe غير محمّل — تأكد من الاتصال بالإنترنت");
+    handsModel = new window.Hands({
+      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
+    });
+    handsModel.setOptions({ maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.7, minTrackingConfidence:0.5 });
+    handsModel.onResults(onResults);
+
+    const stream = await navigator.mediaDevices.getUserMedia({ video:{ width:640, height:480, facingMode:"user" } });
+    video.srcObject = stream;
+    await new Promise(res => (video.onloadedmetadata = res));
+    await video.play();
+
+    cameraObj = new window.Camera(video, {
+      onFrame: async () => handsModel && await handsModel.send({ image: video }),
+      width: 640, height: 480,
+    });
+    cameraObj.start();
+
+    overlayStart.style.display = "none";
+    overlayLoad.style.display  = "none";
+    badge.style.display        = "block";
+    badge.className            = "searching";
+    badge.textContent          = "🔍 يبحث...";
+    btnStart.style.display     = "none";
+    btnStop.style.display      = "inline-flex";
+  } catch (err) {
+    overlayLoad.style.display = "none";
+    btnStart.disabled = false;
+    showError(err.message);
+  }
+}
+
+// Stop camera
+function stopCamera() {
+  cameraObj && cameraObj.stop();
+  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+  overlayStart.style.display = "flex";
+  badge.style.display        = "none";
+  btnStart.style.display     = "inline-flex";
+  btnStart.disabled          = false;
+  btnStop.style.display      = "none";
+  updateSign(null, 0, "");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// Show inline error (no alert — works inside sandboxed iframes)
+function showError(msg) {
+  const banner = document.getElementById("error-banner");
+  document.getElementById("error-msg").textContent = msg;
+  banner.style.display = "flex";
+  setTimeout(() => { banner.style.display = "none"; }, 6000);
+}
+
+// Add sign to sentence
+function addSign() {
+  if (!currentSign || currentSign === "?") return;
+  sentence.push(currentSign);
+  history.unshift({ sign: currentSign, conf: currentConf, time: new Date().toLocaleTimeString("ar") });
+  if (history.length > 12) history.pop();
+  renderSentence(currentSign);
+  renderHistory();
+  btnClear.disabled = false;
+  signDisplay.classList.add("flash");
+  setTimeout(() => signDisplay.classList.remove("flash"), 600);
+}
+
+// Clear sentence
+function clearSentence() {
+  sentence = [];
+  sentenceBox.innerHTML = '<span class="empty">ستظهر الإشارات هنا عند الإضافة...</span>';
+  btnClear.disabled = true;
+}
+
+// Render sentence
+function renderSentence(flashSign) {
+  if (!sentence.length) {
+    sentenceBox.innerHTML = '<span class="empty">ستظهر الإشارات هنا عند الإضافة...</span>';
+    return;
+  }
+  sentenceBox.innerHTML = sentence.map((s, i) =>
+    `<span class="token${i===sentence.length-1&&s===flashSign?" flash":""}">${s}</span>`
+  ).join("");
+  if (flashSign) setTimeout(() => sentenceBox.querySelectorAll(".token.flash").forEach(t=>t.classList.remove("flash")), 600);
+}
+
+// Render history
+function renderHistory() {
+  if (!history.length) { historyList.innerHTML='<div class="empty">لا يوجد سجل بعد</div>'; return; }
+  historyList.innerHTML = history.map(h => {
+    const col = h.conf >= 0.85 ? "#22c55e" : "#f59e0b";
+    return `<div class="hist-row">
+      <span class="hist-sign">${h.sign}</span>
+      <div class="hist-meta">
+        <div class="hist-conf" style="color:${col}">${Math.round(h.conf*100)}%</div>
+        <div class="hist-time">${h.time}</div>
+      </div>
+    </div>`;
+  }).join("");
+}
+</script>
+<div id="error-banner"><span id="error-msg"></span><button onclick="document.getElementById('error-banner').style.display='none'">✕</button></div>
+</body>
+</html>
